@@ -29,7 +29,6 @@ Partial Class gunmu
         ' 
         ' Timer1
         ' 
-        Timer1.Enabled = True
         Timer1.Interval = 50
         ' 
         ' gunmu

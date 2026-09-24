@@ -1,10 +1,13 @@
 ﻿Imports System.IO
 Imports System.IO.Ports
 Imports System.Reflection.Emit
+Imports System.Runtime.InteropServices
 Imports System.Text.Json
 Imports System.Windows.Forms.Design.AxImporter
+Imports System.Windows.Forms.VisualStyles.VisualStyleElement
 Imports System.Windows.Forms.VisualStyles.VisualStyleElement.Button
 Imports System.Xml
+Imports NAudio.CoreAudioApi
 
 Public Class gunmu
     Private WithEvents trayIcon As New NotifyIcon()
@@ -14,8 +17,8 @@ Public Class gunmu
     Private portSelectMenu As ToolStripMenuItem
     Private connectItem As ToolStripMenuItem
     Private conItem As ToolStripMenuItem, autoBoot As ToolStripMenuItem, portItem As ToolStripMenuItem
-    Private selectedPort As String
     Private ReadOnly configPath As String = Path.Combine(Application.StartupPath, "config.json")
+    Dim VolumeLastFrame As Single = 0
 
     Private Sub PortItemClickHandler(sender As Object, e As EventArgs)
         Dim clickedItem As ToolStripMenuItem = CType(sender, ToolStripMenuItem)
@@ -118,6 +121,9 @@ Public Class gunmu
             Catch ex As Exception
             End Try
         End If
+        If autoBoot.Checked = True Then
+            connect(portItem.Text?.ToString.Split(" "c)(1))
+        End If
         Me.Visible = False
     End Sub
 
@@ -193,8 +199,7 @@ Public Class gunmu
         AddHandler connectItem.Click, Sub(s, ev)
                                           If connectItem.Text <> "断开连接" Then
                                               Try
-                                                  Dim pn As String = portItem.Text?.ToString.Split(" "c)(1)
-                                                  connect(pn)
+                                                  connect(portItem.Text?.ToString.Split(" "c)(1))
                                               Catch ex As Exception
                                                   MessageBox.Show("未选择串口或串口不可用！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
                                               End Try
@@ -257,5 +262,26 @@ Public Class gunmu
 
     Private Sub trayIcon_DoubleClick(sender As Object, e As EventArgs) Handles trayIcon.DoubleClick
         '无需响应。
+    End Sub
+
+    Private Sub Timer1_Tick(sender As Object, e As EventArgs) Handles Timer1.Tick
+        Dim activePorts As String() = System.IO.Ports.SerialPort.GetPortNames()
+        Dim portsString As String = "," & String.Join(",", activePorts) & ","
+        Dim enumerator As New MMDeviceEnumerator()
+        Dim device As MMDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
+        Dim Volume As Single = device.AudioEndpointVolume.MasterVolumeLevelScalar
+        If portsString.Contains("," & PriSp.PortName & ",") Then '先判定音量调节器没有断开再发包。
+            PriSp.DtrEnable = True
+            PriSp.RtsEnable = True
+            PriSp.ReadTimeout = 500
+            PriSp.WriteTimeout = 500
+            PriSp.WriteLine($"#{CInt(Volume * 100)}|{CInt(VolumeLastFrame * 100)}|{device.FriendlyName}$")
+            Timer1.Enabled = True
+        ElseIf Not portsString.Contains("," & PriSp.PortName & ",") Then '先判定音量调节器没有断开再发包。
+            PriSp.Close()
+            MessageBox.Show("音量调节器断开，请重新连接。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Application.Exit()
+        End If
+        VolumeLastFrame = volume
     End Sub
 End Class
